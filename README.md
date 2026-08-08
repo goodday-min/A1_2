@@ -233,4 +233,16 @@ LLM API 연결-1차 JSON
 
    마지막 줄 분석
    [로그] 결과 JSON 저장 완료: results\2026-12-31_step1_recommendation.json
+
+
+
+
+1) .gitignore 파일 만들기
+    ni .gitignore
+
+    .env              : API 키 보호
+    __pycache__/
+    *.pyc             : 파이썬 캐시 파일 제외
+    results/          : 결과 JSON이 자동 생성물이라면 제외 가능
+
    
