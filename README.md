@@ -245,4 +245,16 @@ LLM API 연결-1차 JSON
     *.pyc             : 파이썬 캐시 파일 제외
     results/          : 결과 JSON이 자동 생성물이라면 제외 가능
 
+2) .env를 Git 추적에서 제거
+    git rm --cached .env
+    실제 로컬 파일은 안 지워짐
+    Git에서만 추적 해제
+
+3) .gitignore 반영해서 다시 커밋
+    git add .gitignore
+    git commit --amend
+    왜 --amend?
+    마지막 커밋에 .env가 들어갔을 가능성이 높아서,
+    마지막 커밋을 수정하는 방식입니다.
    
+그 다음 푸시 git push origin main
