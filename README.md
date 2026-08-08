@@ -71,32 +71,93 @@ recommended_city
     음식점 검색이 비교적 쉬움
 1. 필요한 환경변수 
     KAKAO_REST_API_KEY=YOUR_KEY (.env 에 저장)
+   https://developers.kakao.com/ 접속후 REST_API 발급
+
+
+* 코드 설명
+(1) 왜 -city를 입력으로 받았나?
+    parser.add_argument("-city", required=True, ...)
+
+    나중에 전체 통합할 때는 이렇게 바뀝니다:
+        city = recommendation["recommended_city"]
+        restaurants = search_kakao_restaurants(city, api_key, errors)
+
+(2) Kakao API 인증 헤더
+       headers = {
+        "Authorization": f"KakaoAK {api_key}"  <-- Kakao Local API는 보통 이런 형식의 헤더를 요구합니다. 
+       }
+(3) 검색어 만들기 
+    query = f"{city} 맛집" 
+        왜 이렇게 하냐면,
+        그냥 "강릉"만 검색하면 음식점이 아닌 장소가 섞일 수 있기 때문입니다.
+        
+        그래서 "도시명 + 맛집" 형태로 검색하면
+        맛집 관련 결과를 더 쉽게 얻을 수 있습니다.
+(4) 음식점 카테고리 제한
+    "category_group_code": "FD6"
+    Kakao Local의 카테고리 그룹 코드에서:    
+    FD6 = 음식점
+    즉, 검색 결과를 음식점 위주로 제한하려는 목적입니다.
+    
+(5) 응답 JSON에서 필요한 필드만 추출
+    item = {
+        "name": doc.get("place_name", ""),
+        "address": doc.get("road_address_name") or doc.get("address_name", ""),
+        "category": doc.get("category_name", ""),
+        "url": doc.get("place_url", ""),
+        "x": float(doc["x"]) if doc.get("x") else None,
+        "y": float(doc["y"]) if doc.get("y") else None
+    }
+    
+   각 필드 의미
+    place_name → 가게 이름
+    road_address_name / address_name → 주소
+    category_name → 카테고리
+    place_url → 카카오맵 URL
+    x, y → 좌표
    
-   
-   
+(6) 주소를 road_address_name or address_name으로 처리한 이유
+    doc.get("road_address_name") or doc.get("address_name", "")
 
+    Kakao 응답에는 도로명 주소가 비어 있는 경우가 있습니다.    
+    그래서 우선순위를 이렇게 둡니다:
+    도로명 주소가 있으면 사용
+    없으면 지번 주소 사용
+    둘 다 없으면 빈 문자열
 
+(7) 좌표를 float로 바꾸는 이유 
+    "x": float(doc["x"]) if doc.get("x") else None,
+    "y": float(doc["y"]) if doc.get("y") else None
 
+(8) 지도 API 실패 시에도 [] 반환
+    except requests.exceptions.RequestException as e:
+        ...
+        return []
 
+    요구사항:
+    지도/장소 API 실패 시에도 리포트 생성은 진행
+    맛집은 “데이터 없음” 처리
+    그래서 이 함수는 실패해도 프로그램을 바로 죽이지 않고
+    빈 리스트 [] 를 돌려줍니다.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+(9) errors 리스트에 오류 누적
+    errors.append(error_msg)
+    콘솔에만 오류를 찍고 끝내지 않음
+    나중에 최종 결과 JSON과 최종 보고서에 반영 가능
+        예:
+        {
+          "errors": [
+            "지도 API 요청 실패: 403 Client Error ..."
+          ]
+        }
+(10) 결과 저장 구조
+    data = {
+        "recommended_city": city,
+        "restaurants": restaurants,
+        "errors": errors
+    }
+    이 구조가 좋은 이유는
+    나중에 전체 통합 JSON과 비슷한 형태로 발전시키기 쉽기 때문입니다.
 
 
 
