@@ -1,279 +1,359 @@
-<img width="1100" height="465" alt="image" src="https://github.com/user-attachments/assets/2b3062e2-a8e2-4b3e-8d69-cc37f06e423c" />
+---
+# API 활용 국내 여행지 추천 프로그램
+
+OpenAI LLM과 Kakao Local API를 활용하여 입력한 날짜에 맞는 국내 여행지를 추천하고, 
+해당 지역의 맛집 정보를 검색한 뒤, 최종 Markdown 여행 리포트를 생성하는 CLI 프로그램입니다.  
+
+---
 
 
-# 프로그램 개요
+## 1. 프로젝트 개요
 
+이 프로그램은 사용자가 여행 날짜를 입력하면 다음 과정을 자동으로 수행합니다.
 
+1. **OpenAI LLM**을 사용해 날짜에 어울리는 국내 여행지 추천
+2. 추천된 도시를 기준으로 **Kakao Local API**를 사용해 맛집 검색
+3. 수집한 추천 결과와 맛집 정보를 바탕으로 **최종 Markdown 리포트 생성**
+4. 각 단계의 결과를 `results/` 폴더에 파일로 저장
+   
+이 프로그램은 **LLM 출력 결과를 JSON 구조로 받아 다음 단계의 입력값으로 연결하는 흐름**을 구현한 것이 특징입니다.
 
-# 실행 방법
+---
+## 2. 과제 목표
 
-### 1단계 : LLM API 연동 
+이 과제를 마친 후, 학습자는 아래를 스스로 설명할 수 있어야 합니다.
 
-Step1에서 이해해야 할 핵심
-    1) 날짜 인자 받기 
-    2) .env에서 API 키 읽기 
-    3) LLM에 보낼 프롬프트 만들기          
-        build_messages()        시스템 프롬프트 설정         
-    4) OpenAI API 호출하기
-        request_openai_chat()   OpenAI Chat Completions API 호출 , 반환값: 모델이 생성한 텍스트    
-    5) 응답을 JSON 형태로 정리하기
-        get_travel_recommendation() LLM 호출 + JSON 파싱, 파싱 실패 시 최대 1회 재시도
-             LLM 호출 함수
-                [로그] LLM 추천 요청 중... (시도 1/2)
-                [로그] LLM 응답 수신 완료
-             내부에 재시도 로직이 있을 가능성이 높습니다.    
-             
-             parse_llm_json()        LLM 응답 텍스트를 JSON으로 파싱하고,최소 스키마를 검사  
-                response.choices[0].message.content 구조
-                result = json.loads(text)     LLM이 준 텍스트를 가져옴, JSON 문자열이면 Python 객체로 변환        
-                
-            
-    6) 파일로 저장하기
-        save_step1_result()
-            path = f"results/{date}_step1_recommendation.json"
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)  
-                
-Step1 전체 흐름을 아주 쉽게 그리면      즉, 입력 → 요청 → 응답 → 저장 구조입니다.  
-    def main():
-        # 1. 실행 인자 받기
-        args = parse_args()
-        date = args.date
+- **REST API의 요청/응답 구조**와 **HTTP 메서드(GET/POST)의 차이**를 말로 설명할 수 있다.
+- **LLM 출력 결과를 구조화(JSON)** 하여 다음 단계(지도/장소 검색)의 입력으로 활용하는 흐름을 설명할 수 있다.
+- 외부 API 호출에서 발생하는 대표 오류(**인증 / 쿼터 / 네트워크 / 파싱**)와 대응 원칙을 설명할 수 있다.
+- API 키를 코드에 직접 작성하지 않고 **`.env` / 환경변수로 관리하는 이유**를 설명할 수 있다.
+
+---
+
+## 3. 주요 기능
+
+### 1) 여행지 추천
+- 입력 날짜를 바탕으로 국내 여행지 1곳 추천
+- 계절감, 날씨 분위기, 어울리는 활동을 함께 생성
+- OpenAI 응답은 JSON 형식으로 받도록 구성
+- **JSON 파싱 실패 시 1회 재시도**
+
+### 2) 맛집 검색
+- 추천된 도시 이름으로 Kakao Local API 검색
+- 최대 5개의 맛집 정보 수집
+- 장소명, 주소, 전화번호, 카테고리, URL, 좌표(x, y) 저장
+
+### 3) 최종 리포트 생성
+- 추천 결과 + 맛집 검색 결과를 이용해 Markdown 리포트 생성
+- LLM 리포트 생성 실패 시 fallback 방식으로 기본 리포트 생성 가능
+
+### 4) 오류 처리
+- API 키 누락 시 프로그램 즉시 종료
+- 날짜 형식 오류 시 안내 메시지 출력
+- OpenAI/Kakao API 호출 오류를 기록하여 최종 리포트에 반영
+  
+---
+
+## 4. 사용 기술
+
+- Python 3.10+
+- [OpenAI Python SDK](https://pypi.org/project/openai/)
+- [Kakao Local API](https://developers.kakao.com/docs/latest/ko/local/dev-guide)
+- requests
+- python-dotenv
+
+---
+
+## 4. 프로젝트 구조
+
+A1_2.  
+├── travel_pipeline.py   
+├── .env  
+├── .gitignore  
+├── requirements.txt  
+├── README.md  
+└── results/  
+
+실행 후 results/ 폴더에 아래 파일들이 생성됩니다.
+
+YYYY-MM-DD_step1_recommendation.json
+YYYY-MM-DD_step2_restaurants.json
+YYYY-MM-DD_travel_report.md
+
+## 6. 설치 방법
+1) 저장소 클론
+    git clone <저장소 주소>
+    cd <프로젝트 폴더>
+
+2) 가상환경 생성 및 활성화
+    python -m venv venv
+    venv\Scripts\activate
+
+3) 패키지 설치
+    pip install -r requirements.txt
+
+## 7. API 키 설정 방법
+프로젝트 루트 경로에 .env 파일을 생성하고 아래와 같이 작성합니다.
+
+    OPENAI_API_KEY=your_openai_api_key
+    KAKAO_REST_API_KEY=your_kakao_rest_api_key
+
+각 키의 용도
+    OPENAI_API_KEY : 여행지 추천 및 최종 리포트 생성용
+    KAKAO_REST_API_KEY : 지역 맛집 검색용
+왜 .env로 관리해야 하나?
+    API 키를 소스코드에 직접 작성하면 GitHub 업로드, 화면 공유, 코드 제출 과정에서 쉽게 유출될 수 있습니다.
+    따라서 환경변수 또는 .env 파일로 분리하여 관리하는 것이 안전합니다.
+
+## 8. 실행 방법
+    아래와 같이 여행 날짜를 입력하여 실행합니다.
+    python main.py -date 2025-10-03
+
+    날짜 입력 형식
+    반드시 아래 형식을 따라야 합니다.
+    YYYY-MM-DD
+    잘못된 날짜를 입력하면 에러 메시지와 함께 사용법이 출력됩니다.
+
+## 9. 결과물 확인 방법
+프로그램 실행이 완료되면 results/ 폴더에서 결과물을 확인할 수 있습니다.
+1) 추천 결과 파일
+    results/YYYY-MM-DD_step1_recommendation.json
+    포함 내용:
     
-        # 2. API 키 준비
-        load_env()
+    입력 날짜
+    추천 도시
+    날씨 설명
+    추천 활동
+    추천 이유
+    오류 목록
+2) 맛집 검색 결과 파일
+    results/YYYY-MM-DD_step2_restaurants.json
+    포함 내용:
     
-        # 3. LLM에 추천 요청
-        result = request_llm_recommendation(date)
+    추천 도시명
+    맛집 목록
+    장소명
+    주소
+    전화번호
+    카테고리
+    링크
+    좌표(x, y)
+    오류 목록
+3) 최종 리포트 파일
+    results/YYYY-MM-DD_travel_report.md
+    포함 내용:
     
-        # 4. 결과 저장
-        save_result(result, date)
-
-추천 읽기 순서
-main()
-parse_args()
-request_llm_recommendation() 같은 핵심 호출 함수
-build_prompt()
-save_result()
+    여행 날짜 요약
+    추천 도시
+    추천 이유
+    예상 날씨
+    추천 활동
+    맛집 추천 목록
+    오류 로그
 
 
-### 2단계 : 지도/장소 API 연동 
-recommended_city
-  → Kakao Local API 호출
-    → 맛집 목록 정리
-      → results/ 에 JSON 저장
-
-이번 단계에서 사용할 API
-    이번 예시는 Kakao Local API 기준으로 설명하겠습니다.
-    이유:
-    국내 장소 검색에 잘 맞음
-    JSON 응답이 깔끔함
-    음식점 검색이 비교적 쉬움
-1. 필요한 환경변수 
-    KAKAO_REST_API_KEY=YOUR_KEY (.env 에 저장)
-   https://developers.kakao.com/ 접속후 REST_API 발급
 
 
-* 코드 설명
-(1) 왜 -city를 입력으로 받았나?
-    parser.add_argument("-city", required=True, ...)
 
-    나중에 전체 통합할 때는 이렇게 바뀝니다:
-        city = recommendation["recommended_city"]
-        restaurants = search_kakao_restaurants(city, api_key, errors)
+## 10.  실행 흐름 설명
+이 프로그램은 다음과 같은 데이터 흐름으로 동작합니다.
 
-(2) Kakao API 인증 헤더
-       headers = {
-        "Authorization": f"KakaoAK {api_key}"  <-- Kakao Local API는 보통 이런 형식의 헤더를 요구합니다. 
-       }
-(3) 검색어 만들기 
-    query = f"{city} 맛집" 
-        왜 이렇게 하냐면,
-        그냥 "강릉"만 검색하면 음식점이 아닌 장소가 섞일 수 있기 때문입니다.
-        
-        그래서 "도시명 + 맛집" 형태로 검색하면
-        맛집 관련 결과를 더 쉽게 얻을 수 있습니다.
-(4) 음식점 카테고리 제한
-    "category_group_code": "FD6"
-    Kakao Local의 카테고리 그룹 코드에서:    
-    FD6 = 음식점
-    즉, 검색 결과를 음식점 위주로 제한하려는 목적입니다.
+Step 1. LLM 여행지 추천
+    사용자가 입력한 날짜를 OpenAI API에 전달하면,
+    LLM이 아래와 같은 구조화된 JSON 결과를 반환합니다.
     
-(5) 응답 JSON에서 필요한 필드만 추출
-    item = {
-        "name": doc.get("place_name", ""),
-        "address": doc.get("road_address_name") or doc.get("address_name", ""),
-        "category": doc.get("category_name", ""),
-        "url": doc.get("place_url", ""),
-        "x": float(doc["x"]) if doc.get("x") else None,
-        "y": float(doc["y"]) if doc.get("y") else None
+    {
+      "recommended_city": "강릉",
+      "weather": "초여름 바다를 즐기기 좋은 시기입니다.",
+      "events": ["해변 산책", "카페 투어", "로컬 음식 탐방"],
+      "reason": "계절과 분위기에 잘 어울리는 여행지입니다."
     }
+
+Step 2. JSON 결과를 다음 API 입력으로 사용
+
+    위 JSON에서 recommended_city 값을 꺼내어,
+    Kakao Local API 검색어인 "강릉 맛집" 형태로 전달합니다.
     
-   각 필드 의미
-    place_name → 가게 이름
-    road_address_name / address_name → 주소
-    category_name → 카테고리
-    place_url → 카카오맵 URL
-    x, y → 좌표
-   
-(6) 주소를 road_address_name or address_name으로 처리한 이유
-    doc.get("road_address_name") or doc.get("address_name", "")
+    즉,
+    
+    LLM 출력(JSON) → recommended_city
+    다음 단계 입력값 → Kakao 검색 쿼리
+    이 과정을 통해 LLM의 결과를 구조화하여 외부 API의 입력으로 연결하는 방식을 구현했습니다.
 
-    Kakao 응답에는 도로명 주소가 비어 있는 경우가 있습니다.    
-    그래서 우선순위를 이렇게 둡니다:
-    도로명 주소가 있으면 사용
-    없으면 지번 주소 사용
-    둘 다 없으면 빈 문자열
+Step 3. 최종 리포트 생성
+    추천 정보와 맛집 정보를 모아서 Markdown 리포트를 생성하고 저장합니다.
 
-(7) 좌표를 float로 바꾸는 이유 
-    "x": float(doc["x"]) if doc.get("x") else None,
-    "y": float(doc["y"]) if doc.get("y") else None
+## 11. REST API와 HTTP 메서드 설명
+이 프로젝트는 외부 API를 호출하는 방식으로 구성되어 있으며,
+이를 통해 REST API의 기본 구조를 이해할 수 있습니다.
 
-(8) 지도 API 실패 시에도 [] 반환
-    except requests.exceptions.RequestException as e:
-        ...
-        return []
+REST API 요청/응답 구조
+일반적으로 REST API는 아래 요소로 구성됩니다.
 
-    요구사항:
-    지도/장소 API 실패 시에도 리포트 생성은 진행
-    맛집은 “데이터 없음” 처리
-    그래서 이 함수는 실패해도 프로그램을 바로 죽이지 않고
-    빈 리스트 [] 를 돌려줍니다.
+URL(엔드포인트) : 요청 대상 주소
+HTTP 메서드 : 어떤 작업을 할지 지정
+헤더(Header) : 인증 정보(API 키 등) 전달
+파라미터(Query / Body) : 검색 조건이나 입력 데이터 전달
+응답(Response) : 보통 JSON 형식으로 결과 반환
+예를 들어 Kakao Local API 호출 시에는:
 
-(9) errors 리스트에 오류 누적
-    errors.append(error_msg)
-    콘솔에만 오류를 찍고 끝내지 않음
-    나중에 최종 결과 JSON과 최종 보고서에 반영 가능
-        예:
-        {
-          "errors": [
-            "지도 API 요청 실패: 403 Client Error ..."
-          ]
-        }
-(10) 결과 저장 구조
-    data = {
-        "recommended_city": city,
-        "restaurants": restaurants,
-        "errors": errors
+URL: 장소 검색 API 주소
+메서드: GET
+헤더: Authorization: KakaoAK ...
+쿼리 파라미터: "도시명 맛집"
+응답: 검색된 장소 목록(JSON)
+
+GET / POST 차이
+GET
+
+서버에서 데이터를 조회할 때 사용
+주로 검색, 조회 기능에 사용
+파라미터가 URL에 포함되는 경우가 많음
+POST
+
+서버에 새로운 데이터를 전달하거나 생성 요청할 때 사용
+요청 본문(body)에 데이터를 담는 경우가 많음
+이 프로젝트에서는 맛집 검색이므로 주로 GET 방식이 사용됩니다.
+
+
+## 12. 대표 오류와 대응 원칙
+외부 API 호출 시 자주 발생할 수 있는 오류와 대응 방식은 아래와 같습니다.
+
+1) 인증 오류
+예:
+
+API 키 누락
+잘못된 키 입력
+권한 미설정
+대응:
+
+.env에 키가 정확히 설정되었는지 확인
+API 서비스 활성화 여부 확인
+인증 실패 메시지를 사용자에게 출력
+2) 쿼터 초과 오류
+예:
+
+일일 호출량 초과
+분당 요청 제한 초과
+대응:
+
+재실행 전에 사용량 확인
+과도한 반복 호출 방지
+필요 시 요청 수 줄이기
+3) 네트워크 오류
+예:
+
+인터넷 연결 문제
+타임아웃
+서버 응답 지연
+대응:
+
+timeout 설정
+예외 처리 후 오류 기록
+빈 결과라도 프로그램이 중단되지 않도록 설계
+4) 파싱 오류
+예:
+
+LLM이 예상 형식이 아닌 응답 반환
+JSON 디코딩 실패
+대응:
+
+JSON 형식만 반환하도록 프롬프트를 강하게 제한
+파싱 실패 시 1회 재시도
+최종 실패 시 오류 로그 기록
+
+## 13. 결과 파일 예시
+1) 추천 결과 JSON
+{
+  "request_date": "2025-05-20",
+  "recommendation": {
+    "recommended_city": "강릉",
+    "weather": "초여름 바다를 즐기기 좋은 시기입니다.",
+    "events": ["해변 산책", "카페 투어", "로컬 음식 탐방"],
+    "reason": "날씨와 계절 분위기를 고려했을 때 만족도가 높은 여행지입니다."
+  },
+  "errors": []
+}
+2) 맛집 검색 결과 JSON
+{
+  "request_date": "2025-05-20",
+  "recommended_city": "강릉",
+  "restaurants": [
+    {
+      "name": "예시 맛집",
+      "address": "강원특별자치도 강릉시 ...",
+      "phone": "033-000-0000",
+      "place_url": "https://place.map.kakao.com/...",
+      "category": "음식점 > 한식",
+      "x": "128.123456",
+      "y": "37.123456"
     }
-    이 구조가 좋은 이유는
-    나중에 전체 통합 JSON과 비슷한 형태로 발전시키기 쉽기 때문입니다.
+  ],
+  "errors": []
+}
+3) Markdown 리포트 예시
+# 국내 여행 추천 리포트
+
+- 여행 날짜: **2025-05-20**
+- 추천 도시: **강릉**
+
+## 1. 추천 이유
+계절과 여행 분위기를 고려했을 때 적합한 여행지입니다.
+
+## 2. 예상 날씨
+초여름 바다를 즐기기 좋은 시기입니다.
+
+## 3. 추천 활동
+- 해변 산책
+- 카페 투어
+- 로컬 음식 탐방
+
+## 4. 맛집 추천
+### 1. 예시 맛집
+- 주소: ...
+- 전화번호: ...
+- 카테고리: ...
+- 링크: ...
+- 좌표: x=..., y=...
+
+## 5. 오류 로그
+- 없음
+
+- 
+## 14. API 키 보안 주의사항
+API 키는 매우 중요한 민감정보이므로 아래 사항을 반드시 지켜야 합니다.
+
+주의사항
+API 키를 코드에 직접 작성하지 않는다.
+.env 파일은 GitHub에 업로드하지 않는다.
+.gitignore에 .env를 반드시 포함한다.
+화면 캡처, 발표 자료, 제출 문서에 키가 보이지 않도록 주의한다.
+키가 노출되었다면 즉시 폐기하고 새 키를 발급받는다.
+예시 .gitignore
+.env
+venv/
+__pycache__/
+results/
+
+## 15. 예외 처리 요약
+이 프로그램은 아래 상황에 대비해 예외 처리를 포함하고 있습니다.
+
+API 키 누락 시 즉시 종료
+잘못된 날짜 형식 입력 시 오류 메시지 출력
+OpenAI JSON 파싱 실패 시 재시도
+Kakao API 요청 실패 시 오류 기록 후 빈 결과 처리
+최종 리포트 생성 실패 시 fallback Markdown 생성
+
+## 16. 실행 예시
+python main.py -date 2025-10-03
+예상 콘솔 출력:
 
 
-### 3단계 : LLM API 연동 - 최종 리포트 작성
-    입력:
-    
-    1차 추천 JSON
-    맛집 목록(0건일 수 있음)
-    출력:
-    
-    Markdown 형식 여행 리포트
-    results/ 폴더에 .md 파일로 저장
-    
-추천 정보 + 맛집 목록
-   → 최종 여행 리포트 생성
-   → results/...report.md 저장
-
-   
+## 17. 향후 개선 아이디어
+실제 날씨 API 연동
+지역 축제/행사 API 연동
+관광지 추천 추가
+웹 UI(Streamlit) 확장
+지도 시각화 기능 추가
 
 
-
-
-
-# API 키 설정 방법
-
-
-# 결과물 확인 방법
-
-
-
-
-CLI는 **Command Line Interface(명령 줄 인터페이스)**의 약자  
-    CLI vs GUI (비교해보면 쉬워요)
-    GUI (Graphical User Interface): 우리가 흔히 쓰는 윈도우 창, 버튼, 이미지, 메뉴가 있는 프로그램입니다. (예: 크롬 브라우저, 카카오톡 PC 버전)
-    CLI (Command Line Interface): 오직 텍스트로만 소통합니다. 사용자가 명령어를 타이핑하면, 프로그램이 텍스트로 답을 줍니다. (예: 명령 프롬프트(CMD), 터미널)
-    
-    핵심 로직에 집중 가능: 디자인이나 버튼 배치를 고민할 필요 없이, "LLM 연결"과 "지도 API 활용"이라는 프로그램의 진짜 기능(로직)을 만드는 데 집중할 수 있습니다.
-    개발 속도가 빠름: 화면을 그리는 코드를 짤 필요가 없어 훨씬 빠르게 결과를 확인할 수 있습니다.
-    서버 환경에 적합: 나중에 이 프로그램을 서버에 올릴 때, 서버는 보통 화면이 없는 CLI 환경인 경우가 많습니다.
-
-argparse는 파이썬 프로그램에 **'인자(Argument)'**를 전달할 수 있게 도와주는 도구
-1. input() vs argparse 차이점
-    input() (대화형):
-       $ python travel.py
-       > 여행 날짜를 입력하세요: 10월  (실행 후에 입력) 
-    argparse (명령행 인자 방식):
-       $ python travel.py --date 10월  (실행할 때 미리 입력)
-
-2. 왜 argparse를 쓸까요? (장점)
-    자동화에 유리함: 다른 프로그램이 내 프로그램을 실행시킬 때, 일일이 타이핑할 필요 없이 한 줄의 명령어로 제어할 수 있습니다.
-    도움말 자동 생성: 터미널에 python travel.py --help라고 치면, 내가 설정한 help 문구들이 예쁘게 정리되어 출력됩니다. (직접 해보시면 신기할 거예요!)
-    기본값 설정 가능: 사용자가 날짜를 입력 안 했을 때 기본적으로 '오늘'로 설정하는 등의 처리가 매우 쉽습니다.
-
-
-
-1) requests 설치
-py -m pip install requests
-설치가 잘 되었는지 확인
-py -m pip show requests
-
-2) from dotenv import load_dotenv 오류 ->  dotenv 설치 
-  Python 환경에 dotenv 모듈이 없어서 실패, 설치 명령어 이름이 dotenv가 아니라 python-dotenv
-   py -m pip install python-dotenv
-
-
-3) 설치 파일명 정리 : requirements.txt
-    py -m pip install -r requirements.txt
-
-4)  .env 파일 방식
-    프로젝트별로 관리하기 좋음
-    코드 수정 없이 사용 가능
-    다른 API 키 추가도 쉬움
-
-
-
-LLM API 연결-1차 JSON  
-
-화면 내용 분석
-1. 실행 명령어
-    py step1_llm_recommend.py -date 2026-12-31
-    
-       
-2. 로그
-    [로그] LLM 추천 요청 중... (시도 1/2)
-    [로그] LLM 응답 수신 완료
-   
-    의미: 프로그램이 OpenAI에 추천 요청을 보냈고
-    첫 번째 시도에서 바로 응답을 받았다는 뜻입니다.
-   
-4. 추천 결과
-    <img width="701" height="293" alt="image" src="https://github.com/user-attachments/assets/29793b57-d8fa-4267-9b15-a4ebb6859d03" /> 
-    LLM이 요청 형식에 맞게 결과를 잘 만들어냈습니다.
-
-   마지막 줄 분석
-   [로그] 결과 JSON 저장 완료: results\2026-12-31_step1_recommendation.json
-
-
-
-
-1) .gitignore 파일 만들기
-    ni .gitignore
-
-    .env              : API 키 보호
-    __pycache__/
-    *.pyc             : 파이썬 캐시 파일 제외
-    results/          : 결과 JSON이 자동 생성물이라면 제외 가능
-
-2) .env를 Git 추적에서 제거
-    git rm --cached .env
-    실제 로컬 파일은 안 지워짐
-    Git에서만 추적 해제
-
-3) .gitignore 반영해서 다시 커밋
-    git add .gitignore
-    git commit --amend
-    왜 --amend?
-    마지막 커밋에 .env가 들어갔을 가능성이 높아서,
-    마지막 커밋을 수정하는 방식입니다.
-   
-그 다음 푸시 git push origin main
