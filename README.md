@@ -1,6 +1,6 @@
-# A1_2
+<img width="1100" height="465" alt="image" src="https://github.com/user-attachments/assets/2b3062e2-a8e2-4b3e-8d69-cc37f06e423c" />
 
-🔎📒📑🍨🍴
+
 # 프로그램 개요
 
 
