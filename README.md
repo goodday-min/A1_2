@@ -118,6 +118,10 @@ A1_2.
     YYYY-MM-DD
     잘못된 날짜를 입력하면 에러 메시지와 함께 사용법이 출력됩니다.
 
+<img width="1111" height="462" alt="image" src="https://github.com/user-attachments/assets/44f5aa86-90ca-48b9-821e-c0141a613439" />
+<img width="844" height="446" alt="image" src="https://github.com/user-attachments/assets/c3a0b91f-6419-4240-bf9c-01847c93bd33" />
+
+
 ## 9. 결과물 확인 방법  
 
 프로그램 실행이 완료되면 results/ 폴더에서 결과물을 확인할 수 있습니다.
