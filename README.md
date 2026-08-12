@@ -1,5 +1,5 @@
 ---
-# API 활용 국내 여행지 추천 프로그램
+# 🚗 API 활용 국내 여행지 추천 프로그램
 
 OpenAI LLM과 Kakao Local API를 활용하여 입력한 날짜에 맞는 국내 여행지를 추천하고, 
 해당 지역의 맛집 정보를 검색한 뒤, 최종 Markdown 여행 리포트를 생성하는 CLI 프로그램입니다.  
@@ -11,12 +11,12 @@ OpenAI LLM과 Kakao Local API를 활용하여 입력한 날짜에 맞는 국내 
 
 이 프로그램은 사용자가 여행 날짜를 입력하면 다음 과정을 자동으로 수행합니다.
 
-1. **OpenAI LLM**을 사용해 날짜에 어울리는 국내 여행지 추천
-2. 추천된 도시를 기준으로 **Kakao Local API**를 사용해 맛집 검색
-3. 수집한 추천 결과와 맛집 정보를 바탕으로 **최종 Markdown 리포트 생성**
-4. 각 단계의 결과를 `results/` 폴더에 파일로 저장
+1. **OpenAI LLM**을 사용해 날짜에 어울리는 국내 여행지 추천   
+2. 추천된 도시를 기준으로 **Kakao Local API**를 사용해 맛집 검색   
+3. 수집한 추천 결과와 맛집 정보를 바탕으로 **최종 Markdown 리포트 생성**   
+4. 각 단계의 결과를 `results/` 폴더에 파일로 저장  
    
-이 프로그램은 **LLM 출력 결과를 JSON 구조로 받아 다음 단계의 입력값으로 연결하는 흐름**을 구현한 것이 특징입니다.
+✅ 이 프로그램은 **LLM 출력 결과를 JSON 구조로 받아 다음 단계의 입력값으로 연결하는 흐름**을 구현한 것이 특징입니다.
 
 ---
 
@@ -46,12 +46,16 @@ OpenAI LLM과 Kakao Local API를 활용하여 입력한 날짜에 맞는 국내 
 
 ## 3. 사용 기술
 
-- Python 3.10+
-- [OpenAI Python SDK](https://pypi.org/project/openai/)
-- [Kakao Local API](https://developers.kakao.com/docs/latest/ko/local/dev-guide)
-- requests
-- python-dotenv
+| 사용 도구 | 사용 방법 |
+| --- | --- |
+| Python 3.10+ | 프로그램 전체 로직 구현에 사용한 언어 |
+| [OpenAI Python SDK] | 여행지 추천과 최종 리포트 생성을 위한 LLM API 호출에 사용 |
+| Kakao Local API] | 추천된 지역의 맛집 검색을 위한 장소 검색 API |
+| Requests | Python에서 HTTP 요청을 보내기 위한 라이브러리로, Kakao Local API에 GET 요청을 보내고 응답을 받는 데 사용 |
+| python-dotenv | .env 파일에 저장된 환경변수를 불러오는 라이브러리로, API 키를 코드에 직접 작성하지 않고 안전하게 관리하기 위해 사용 |
 
+      OpenAI Python SDK](https://pypi.org/project/openai/)  
+      Kakao Local API](https://developers.kakao.com/docs/latest/ko/local/dev-guide)  
 ---
 
 ## 4. 프로젝트 구조
@@ -64,8 +68,7 @@ A1_2.
 ├── README.md  
 └── results/  
 
-실행 후 results/ 폴더에 아래 파일들이 생성됩니다.
-
+      실행 후 results/ 폴더에 아래 파일들이 생성됩니다.
       YYYY-MM-DD_step1_recommendation.json  
       YYYY-MM-DD_step2_restaurants.json  
       YYYY-MM-DD_travel_report.md  
