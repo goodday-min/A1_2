@@ -1,4 +1,3 @@
-
 import os
 import json
 import argparse
@@ -57,17 +56,22 @@ def normalize_recommendation(data: dict) -> dict:
     }
 
 
+def validate_required_env_keys() -> list[str]:
+    errors = []
+
+    if not os.getenv("OPENAI_API_KEY"):
+        errors.append("OpenAI API 키가 설정되지 않았습니다. (.env의 OPENAI_API_KEY 확인)")
+
+    if not os.getenv("KAKAO_REST_API_KEY"):
+        errors.append("Kakao REST API 키가 설정되지 않았습니다. (.env의 KAKAO_REST_API_KEY 확인)")
+
+    return errors
+
+
 # =========================
 # 1단계: 여행지 추천
 # =========================
-def get_travel_recommendation(travel_date: str, errors: list[str]) -> dict:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        errors.append("OpenAI API 키가 설정되지 않았습니다. (.env의 OPENAI_API_KEY 확인)")
-        return {}
-
-    client = OpenAI(api_key=api_key)
-
+def get_travel_recommendation(client: OpenAI, travel_date: str, errors: list[str]) -> dict:
     prompt = f"""
 당신은 국내 여행 추천 전문가입니다.
 
@@ -87,24 +91,39 @@ def get_travel_recommendation(travel_date: str, errors: list[str]) -> dict:
 }}
 """
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "당신은 JSON만 반환하는 여행 추천 도우미입니다."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            response_format={"type": "json_object"}
-        )
+    for attempt in range(2):  # 최초 1회 + 재시도 1회
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "당신은 JSON만 반환하는 여행 추천 도우미입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                response_format={"type": "json_object"}
+            )
 
-        content = response.choices[0].message.content
-        data = json.loads(content)
-        return normalize_recommendation(data)
+            content = response.choices[0].message.content or "{}"
+            data = json.loads(content)
+            normalized = normalize_recommendation(data)
 
-    except Exception as e:
-        errors.append(f"OpenAI 추천 생성 실패: {e}")
-        return {}
+            if not normalized.get("recommended_city"):
+                errors.append("OpenAI 추천 결과에 recommended_city 값이 없습니다.")
+
+            return normalized
+
+        except json.JSONDecodeError as e:
+            if attempt == 1:
+                errors.append(f"OpenAI JSON 파싱 최종 실패: {e}")
+                return {}
+            continue
+
+        except Exception as e:
+            errors.append(f"OpenAI 추천 생성 실패: {e}")
+            return {}
+
+    errors.append("OpenAI 추천 생성 실패: 알 수 없는 오류")
+    return {}
 
 
 # =========================
@@ -112,9 +131,6 @@ def get_travel_recommendation(travel_date: str, errors: list[str]) -> dict:
 # =========================
 def search_kakao_restaurants(city: str, errors: list[str], size: int = 5) -> list[dict]:
     api_key = os.getenv("KAKAO_REST_API_KEY")
-    if not api_key:
-        errors.append("Kakao REST API 키가 설정되지 않았습니다. (.env의 KAKAO_REST_API_KEY 확인)")
-        return []
 
     url = "https://dapi.kakao.com/v2/local/search/keyword.json"
     headers = {
@@ -144,7 +160,9 @@ def search_kakao_restaurants(city: str, errors: list[str], size: int = 5) -> lis
                 "address": doc.get("road_address_name") or doc.get("address_name", ""),
                 "phone": doc.get("phone", ""),
                 "place_url": doc.get("place_url", ""),
-                "category": doc.get("category_name", "")
+                "category": doc.get("category_name", ""),
+                "x": doc.get("x", ""),  # 경도
+                "y": doc.get("y", "")   # 위도
             })
 
         return restaurants
@@ -155,25 +173,30 @@ def search_kakao_restaurants(city: str, errors: list[str], size: int = 5) -> lis
 
 
 # =========================
-# 3단계: Markdown 리포트 생성
+# 3단계: Markdown 리포트 생성 (LLM)
 # =========================
-def build_markdown_report(travel_date: str, recommendation: dict, restaurants: list[dict], errors: list[str]) -> str:
+def build_fallback_markdown_report(
+    travel_date: str,
+    recommendation: dict,
+    restaurants: list[dict],
+    errors: list[str]
+) -> str:
     city = recommendation.get("recommended_city", "추천 없음")
     weather = recommendation.get("weather", "정보 없음")
     events = recommendation.get("events", [])
     reason = recommendation.get("reason", "정보 없음")
 
     lines = [
-        f"# 국내 여행 추천 리포트",
+        "# 국내 여행 추천 리포트",
         "",
         f"- 여행 날짜: **{travel_date}**",
-        f"- 추천 도시: **{city}**",
+        f"- 추천 도시: **{city or '추천 없음'}**",
         "",
         "## 1. 추천 이유",
-        reason,
+        reason or "정보 없음",
         "",
         "## 2. 예상 날씨",
-        weather,
+        weather or "정보 없음",
         "",
         "## 3. 추천 활동"
     ]
@@ -193,10 +216,11 @@ def build_markdown_report(travel_date: str, recommendation: dict, restaurants: l
         for idx, place in enumerate(restaurants, start=1):
             lines.extend([
                 f"### {idx}. {place.get('name', '')}",
-                f"- 주소: {place.get('address', '')}",
+                f"- 주소: {place.get('address', '') or '정보 없음'}",
                 f"- 전화번호: {place.get('phone', '') or '정보 없음'}",
                 f"- 카테고리: {place.get('category', '') or '정보 없음'}",
                 f"- 링크: {place.get('place_url', '') or '정보 없음'}",
+                f"- 좌표: x={place.get('x', '') or '정보 없음'}, y={place.get('y', '') or '정보 없음'}",
                 ""
             ])
     else:
@@ -213,24 +237,105 @@ def build_markdown_report(travel_date: str, recommendation: dict, restaurants: l
     return "\n".join(lines)
 
 
+def build_markdown_report_with_llm(
+    client: OpenAI,
+    travel_date: str,
+    recommendation: dict,
+    restaurants: list[dict],
+    errors: list[str]
+) -> tuple[str, list[str]]:
+    prompt = f"""
+당신은 여행 리포트 작성 도우미입니다.
+
+아래 데이터를 바탕으로 최종 여행 리포트를 한국어 Markdown 형식으로 작성하세요.
+반드시 Markdown 본문만 출력하세요.
+설명 문장, 코드블록, JSON은 출력하지 마세요.
+
+[입력 데이터]
+- 여행 날짜: {travel_date}
+
+- 추천 정보(JSON):
+{json.dumps(recommendation, ensure_ascii=False, indent=2)}
+
+- 맛집 목록(JSON):
+{json.dumps(restaurants, ensure_ascii=False, indent=2)}
+
+- 오류 목록(JSON):
+{json.dumps(errors, ensure_ascii=False, indent=2)}
+
+[작성 규칙]
+1. 제목은 "# 국내 여행 추천 리포트"
+2. 아래 섹션을 순서대로 포함하세요.
+   - 여행 날짜 / 추천 도시 요약
+   - 1. 추천 이유
+   - 2. 예상 날씨
+   - 3. 추천 활동
+   - 4. 맛집 추천
+   - 5. 오류 로그
+3. 맛집은 번호 목록처럼 보기 좋게 정리하세요.
+4. 맛집마다 가능하면 이름, 주소, 전화번호, 카테고리, 링크, 좌표(x, y)를 포함하세요.
+5. 정보가 없으면 "정보 없음"이라고 쓰세요.
+6. 오류가 없으면 오류 로그에 "- 없음"이라고 쓰세요.
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "당신은 Markdown 리포트만 작성하는 도우미입니다."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4
+        )
+
+        content = response.choices[0].message.content or ""
+        content = content.strip()
+
+        if not content:
+            raise ValueError("LLM이 비어 있는 리포트를 반환했습니다.")
+
+        return content, []
+
+    except Exception as e:
+        step3_errors = [f"최종 리포트 생성 실패: {e}"]
+        merged_errors = dedupe_errors(errors + step3_errors)
+        fallback_report = build_fallback_markdown_report(
+            travel_date=travel_date,
+            recommendation=recommendation,
+            restaurants=restaurants,
+            errors=merged_errors
+        )
+        return fallback_report, step3_errors
+
+
 # =========================
 # 메인 실행
 # =========================
 def main():
     parser = argparse.ArgumentParser(description="국내 여행 추천 통합 프로그램")
-    parser.add_argument("date", help="여행 날짜 (YYYY-MM-DD)")
+    parser.add_argument("-date", required=True, help="여행 날짜 (YYYY-MM-DD)")
     args = parser.parse_args()
 
     load_dotenv()
     ensure_results_dir()
 
+    env_errors = validate_required_env_keys()
+    if env_errors:
+        print("[오류] 필수 API 키가 설정되지 않았습니다.")
+        for err in env_errors:
+            print(f"- {err}")
+        return
+
     try:
         travel_date = validate_date(args.date)
     except ValueError as e:
-        print(f"[오류] {e}")
+        print(f"[오류] {e}\n")
+        parser.print_help()
         return
 
-    print("[시작] 🔎 국내 여행 추천 프로그램 실행")
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    print("[시작] 🚗 국내 여행 추천 프로그램 실행")
     print(f"- 여행 날짜: {travel_date}")
     print()
 
@@ -239,9 +344,22 @@ def main():
     # -------------------------
     # Step 1: 여행지 추천
     # -------------------------
-    print("[1/3] 📑 여행지 추천 생성 중...")
+    print("[1/3] 🔎 여행지 추천 생성 중 ...")
     step1_errors = []
-    recommendation = get_travel_recommendation(travel_date, step1_errors)
+    recommendation = get_travel_recommendation(client, travel_date, step1_errors)
+
+    if isinstance(recommendation, dict):
+        recommended_city = (
+            recommendation.get("recommended_city")
+            or recommendation.get("city")
+            or recommendation.get("destination")
+            or "알 수 없음"
+        )
+    else:
+        recommended_city = recommendation or "알 수 없음"
+
+    recommended_city = str(recommended_city).strip().strip('"')
+    print(f"- 추천 도시: {recommended_city}")
 
     step1_data = {
         "request_date": travel_date,
@@ -250,8 +368,7 @@ def main():
     }
     step1_path = RESULTS_DIR / f"{travel_date}_step1_recommendation.json"
     save_json(step1_path, step1_data)
-    #print(f"[완료] 추천 결과 저장: {step1_path}")
-    print(f"[완료] 추천 여행지: {step1_path}")
+    print(f"[완료] 추천 결과 저장: {step1_path}")
     print()
 
     all_errors.extend(step1_errors)
@@ -259,9 +376,9 @@ def main():
     # -------------------------
     # Step 2: 맛집 검색
     # -------------------------
-    print("[2/3] 🍴 맛집 검색 중...")
+    print("[2/3] 🍨 맛집 검색 중 ...")
     step2_errors = []
-    city = recommendation.get("recommended_city", "")
+    city = recommendation.get("recommended_city", "") if isinstance(recommendation, dict) else ""
 
     if city:
         restaurants = search_kakao_restaurants(city, step2_errors, size=5)
@@ -283,17 +400,20 @@ def main():
     all_errors.extend(step2_errors)
 
     # -------------------------
-    # Step 3: Markdown 리포트
+    # Step 3: Markdown 리포트 생성
     # -------------------------
-    print("[3/3] 📒 Markdown 리포트 생성 중...")
-    final_errors = dedupe_errors(all_errors)
+    print("[3/3] 📑 Markdown 리포트 생성 중 ...")
+    final_errors_before_step3 = dedupe_errors(all_errors)
 
-    report_md = build_markdown_report(
+    report_md, step3_errors = build_markdown_report_with_llm(
+        client=client,
         travel_date=travel_date,
         recommendation=recommendation,
         restaurants=restaurants,
-        errors=final_errors
+        errors=final_errors_before_step3
     )
+
+    final_errors = dedupe_errors(all_errors + step3_errors)
 
     report_path = RESULTS_DIR / f"{travel_date}_travel_report.md"
     save_text(report_path, report_md)
